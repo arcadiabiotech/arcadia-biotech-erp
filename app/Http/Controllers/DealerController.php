@@ -2,165 +2,184 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\DealerStoreRequest;
+use App\Http\Requests\DealerUpdateRequest;
+use App\Models\ActivityLog;
 use App\Models\Dealer;
+use App\Models\District;
+use App\Models\State;
+use App\Models\Taluka;
+use App\Models\Village;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class DealerController extends Controller
 {
+    public function __construct()
+    {
+        $this->authorizeResource(Dealer::class, 'dealer');
+    }
+
     /**
-     * Dealer List
+     * Dealer list. Search, filter, pagination and role-based scoping all
+     * happen here; eager loading avoids N+1 queries on the location and
+     * assignment columns rendered per row.
      */
     public function index(Request $request)
     {
-        $search = $request->search;
+        $user = $request->user();
+        $search = $request->string('search')->toString();
+        $statusFilter = $request->string('status')->toString();
+        $stateFilter = $request->string('state')->toString();
+        $trashed = $request->boolean('trashed');
 
-        $dealers = Dealer::when($search, function ($query) use ($search) {
+        $dealers = Dealer::with(['state', 'district', 'assignment.marketingUser'])
+            ->when($trashed, fn ($query) => $query->onlyTrashed())
+            ->when($search, fn ($query) => $query->where(fn ($q) => $q
+                ->where('dealer_code', 'like', "%{$search}%")
+                ->orWhere('dealer_name', 'like', "%{$search}%")
+                ->orWhere('firm_name', 'like', "%{$search}%")
+                ->orWhere('mobile', 'like', "%{$search}%")))
+            ->when($statusFilter !== '', fn ($query) => $query->where('status', $statusFilter === '1'))
+            ->when($stateFilter, fn ($query) => $query->where('state_id', $stateFilter))
+            ->when($user->hasRole('marketing'), fn ($query) => $query->whereHas('assignment', fn ($q) => $q->where('marketing_user_id', $user->id)))
+            ->when($user->hasRole('dealer'), fn ($query) => $query->where('id', $user->dealer_id))
+            ->latest()
+            ->paginate(15)
+            ->withQueryString();
 
-            $query->where('dealer_code', 'LIKE', "%{$search}%")
-                  ->orWhere('dealer_name', 'LIKE', "%{$search}%")
-                  ->orWhere('firm_name', 'LIKE', "%{$search}%")
-                  ->orWhere('mobile', 'LIKE', "%{$search}%");
-
-        })
-        ->latest()
-        ->paginate(15)
-        ->withQueryString();
-
-        return view('dealers.index', compact('dealers'));
+        return view('dealers.index', [
+            'dealers' => $dealers,
+            'states' => State::where('status', true)->orderBy('name')->get(),
+            'trashed' => $trashed,
+        ]);
     }
 
-    /**
-     * Add Dealer Form
-     */
     public function create()
     {
-        return view('dealers.create');
+        return view('dealers.form', array_merge(
+            ['dealer' => new Dealer(['status' => true, 'credit_limit' => 0])],
+            $this->locationOptions()
+        ));
     }
 
-    /**
-     * Save Dealer
-     */
-    public function store(Request $request)
+    public function store(DealerStoreRequest $request)
     {
-        $request->validate([
+        $data = $this->prepared($request);
+        $data['dealer_code'] = $this->nextDealerCode();
+        $data['created_by'] = $request->user()->id;
 
-            'firm_name'   => 'required|max:150',
+        $dealer = Dealer::create($data);
 
-            'dealer_name' => 'required|max:150',
+        ActivityLog::record('dealers', $dealer->id, 'create', [], $dealer->toArray());
 
-            'mobile'      => 'required|digits:10|unique:dealers,mobile',
-
-            'whatsapp'    => 'nullable|digits:10',
-
-            'email'       => 'nullable|email',
-
-        ]);
-
-        // Auto Dealer Code
-        $lastDealer = Dealer::latest()->first();
-
-        if ($lastDealer) {
-
-            $number = (int) substr($lastDealer->dealer_code,3);
-
-            $dealerCode = 'ARC'.str_pad($number+1,6,'0',STR_PAD_LEFT);
-
-        } else {
-
-            $dealerCode = 'ARC000001';
-
-        }
-
-        Dealer::create([
-
-            'dealer_code' => $dealerCode,
-
-            'firm_name' => ucwords(strtolower($request->firm_name)),
-
-            'dealer_name' => ucwords(strtolower($request->dealer_name)),
-
-            'mobile' => $request->mobile,
-
-            'whatsapp' => $request->whatsapp,
-
-            'email' => $request->email,
-
-            'gst_number' => $request->gst_number,
-
-            'pan_number' => $request->pan_number,
-
-            'address' => $request->address,
-
-            'status' => true,
-
-        ]);
-
-        return redirect()
-            ->route('dealers.index')
-            ->with('success','Dealer Registered Successfully.');
+        return redirect()->route('dealers.index')->with('success', 'Dealer registered successfully.');
     }
 
     /**
-     * Edit Dealer
+     * Dealer profile page: details, location, audit history, and
+     * placeholders for the future ledger and documents modules.
      */
+    public function show(Dealer $dealer)
+    {
+        $dealer->load(['state', 'district', 'taluka', 'village', 'assignment.marketingUser', 'createdBy', 'updatedBy']);
+
+        $activity = ActivityLog::where('module', 'dealers')->where('record_id', $dealer->id)->latest()->limit(20)->get();
+
+        return view('dealers.show', compact('dealer', 'activity'));
+    }
+
     public function edit(Dealer $dealer)
     {
-        return view('dealers.edit',compact('dealer'));
+        return view('dealers.form', array_merge(
+            ['dealer' => $dealer],
+            $this->locationOptions()
+        ));
     }
 
-    /**
-     * Update Dealer
-     */
-    public function update(Request $request, Dealer $dealer)
+    public function update(DealerUpdateRequest $request, Dealer $dealer)
     {
-        $request->validate([
+        $original = $dealer->toArray();
 
-            'firm_name'   => 'required|max:150',
+        $data = $this->prepared($request);
+        $data['updated_by'] = $request->user()->id;
 
-            'dealer_name' => 'required|max:150',
+        $dealer->update($data);
 
-            'mobile'      => 'required|digits:10|unique:dealers,mobile,'.$dealer->id,
+        ActivityLog::record('dealers', $dealer->id, 'update', $original, $dealer->fresh()->toArray());
 
-            'whatsapp'    => 'nullable|digits:10',
-
-            'email'       => 'nullable|email',
-
-        ]);
-
-        $dealer->update([
-
-            'firm_name' => ucwords(strtolower($request->firm_name)),
-
-            'dealer_name' => ucwords(strtolower($request->dealer_name)),
-
-            'mobile' => $request->mobile,
-
-            'whatsapp' => $request->whatsapp,
-
-            'email' => $request->email,
-
-            'gst_number' => $request->gst_number,
-
-            'pan_number' => $request->pan_number,
-
-            'address' => $request->address,
-
-        ]);
-
-        return redirect()
-            ->route('dealers.index')
-            ->with('success','Dealer Updated Successfully.');
+        return redirect()->route('dealers.index')->with('success', 'Dealer updated successfully.');
     }
 
-    /**
-     * Delete Dealer
-     */
     public function destroy(Dealer $dealer)
     {
-        $dealer->delete();
+        DB::transaction(function () use ($dealer) {
+            $dealer->update(['deleted_by' => auth()->id()]);
+            $dealer->delete();
+        });
 
-        return redirect()
-            ->route('dealers.index')
-            ->with('success','Dealer Deleted Successfully.');
+        ActivityLog::record('dealers', $dealer->id, 'delete');
+
+        return redirect()->route('dealers.index')->with('success', 'Dealer deleted successfully.');
+    }
+
+    /**
+     * Restore a soft-deleted dealer. Not part of the standard resourceful
+     * methods, so authorization is checked explicitly. The route is bound
+     * withTrashed() so the model resolves despite the SoftDeletingScope.
+     */
+    public function restore(Dealer $dealer)
+    {
+        $this->authorize('restore', $dealer);
+
+        DB::transaction(function () use ($dealer) {
+            $dealer->restore();
+            $dealer->update(['deleted_by' => null]);
+        });
+
+        ActivityLog::record('dealers', $dealer->id, 'update', [], [], 'Dealer restored');
+
+        return redirect()->route('dealers.index')->with('success', 'Dealer restored successfully.');
+    }
+
+    /**
+     * Shared field prep for store/update: title-case the name fields and
+     * make sure credit_limit never lands on the not-null column as NULL
+     * when the field is left blank.
+     */
+    private function prepared(DealerStoreRequest|DealerUpdateRequest $request): array
+    {
+        $data = $request->validated();
+        $data['firm_name'] = ucwords(strtolower($data['firm_name']));
+        $data['dealer_name'] = ucwords(strtolower($data['dealer_name']));
+        $data['credit_limit'] = $data['credit_limit'] ?? 0;
+
+        return $data;
+    }
+
+    /**
+     * DLR000001-style codes. withTrashed() avoids reissuing a code that
+     * belongs to a soft-deleted dealer just because it's hidden from the
+     * default query; SUBSTRING position 4 works for both this app's new
+     * "DLR" prefix and any pre-existing "ARC"-prefixed codes, since both
+     * are 3 characters.
+     */
+    private function nextDealerCode(): string
+    {
+        $maxNumber = Dealer::withTrashed()
+            ->selectRaw('MAX(CAST(SUBSTRING(dealer_code, 4) AS UNSIGNED)) as max_number')
+            ->value('max_number');
+
+        return 'DLR'.str_pad(((int) $maxNumber) + 1, 6, '0', STR_PAD_LEFT);
+    }
+
+    private function locationOptions(): array
+    {
+        return [
+            'states' => State::where('status', true)->orderBy('name')->get(['id', 'name']),
+            'districts' => District::where('status', true)->orderBy('name')->get(['id', 'name', 'state_id']),
+            'talukas' => Taluka::where('status', true)->orderBy('name')->get(['id', 'name', 'district_id']),
+            'villages' => Village::where('status', true)->orderBy('name')->get(['id', 'name', 'taluka_id']),
+        ];
     }
 }

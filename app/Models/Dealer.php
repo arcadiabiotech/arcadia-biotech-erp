@@ -4,10 +4,11 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Dealer extends Model
 {
-    use HasFactory;
+    use HasFactory, SoftDeletes;
 
     protected $fillable = [
         'dealer_code',
@@ -25,13 +26,17 @@ class Dealer extends Model
         'village_id',
         'pin_code',
         'agreement_date',
+        'credit_limit',
+        'remarks',
         'status',
         'created_by',
         'updated_by',
+        'deleted_by',
     ];
 
     protected $casts = [
         'agreement_date' => 'date',
+        'credit_limit' => 'decimal:2',
         'status' => 'boolean',
     ];
 
@@ -53,5 +58,28 @@ class Dealer extends Model
     public function village()
     {
         return $this->belongsTo(Village::class);
+    }
+
+    /**
+     * The marketing assignment for this dealer (one dealer -> one marketing user).
+     */
+    public function assignment()
+    {
+        return $this->hasOne(DealerAssignment::class);
+    }
+
+    public function createdBy()
+    {
+        return $this->belongsTo(User::class, 'created_by');
+    }
+
+    public function updatedBy()
+    {
+        return $this->belongsTo(User::class, 'updated_by');
+    }
+
+    public function deletedBy()
+    {
+        return $this->belongsTo(User::class, 'deleted_by');
     }
 }

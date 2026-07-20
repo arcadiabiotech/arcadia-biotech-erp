@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(php artisan *)",
+      "Bash(php -r ' *)",
+      "Bash(rm -f storage/app/test_output.json)"
+    ]
+  }
+}

@@ -5,13 +5,14 @@ namespace Database\Seeders;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
 use App\Models\User;
+use App\Models\Role;
 
 class UserSeeder extends Seeder
 {
     public function run(): void
     {
-        User::create([
-            'role_id' => 1,
+        User::updateOrCreate(['email' => 'admin@arcadia.com'], [
+            'role_id' => Role::where('name', 'super-admin')->value('id'),
             'dealer_id' => null,
 
             'name' => 'Admin',
