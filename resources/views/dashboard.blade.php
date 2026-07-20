@@ -1,135 +1,18 @@
 <x-app-layout>
-
-    <div class="py-6">
-
-        <!-- Welcome -->
-        <div class="mb-8">
-
-            <h1 class="text-3xl font-bold text-slate-800">
-                Welcome, {{ Auth::user()->name }}
-            </h1>
-
-            <p class="text-gray-500 mt-1">
-                Banana Tissue Culture ERP Management System
-            </p>
-
+    @php
+        $stats = [
+            ['label' => 'Total Dealers', 'value' => \App\Models\Dealer::count(), 'color' => 'blue', 'icon' => 'M4 7h16v13H4z M8 7V4h8v3 M4 12h16'],
+            ['label' => 'Registered Farmers', 'value' => \App\Models\Customer::count(), 'color' => 'emerald', 'icon' => 'M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2 M9 11a4 4 0 100-8 4 4 0 000 8z'],
+            ['label' => 'Active States', 'value' => \App\Models\State::count(), 'color' => 'violet', 'icon' => 'M12 22a10 10 0 100-20 10 10 0 000 20z M2 12h20'],
+            ['label' => 'Talukas Covered', 'value' => \App\Models\Taluka::count(), 'color' => 'amber', 'icon' => 'M21 10c0 7-9 12-9 12S3 17 3 10a9 9 0 1118 0z'],
+        ];
+    @endphp
+    <div class="mx-auto max-w-7xl">
+        <div class="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"><div><p class="mb-1 text-sm font-semibold text-blue-600">OVERVIEW</p><h1 class="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">Welcome back, {{ auth()->user()->name }}</h1><p class="mt-2 text-sm text-slate-500">Here is what is happening across your tissue culture operations today.</p></div><div class="inline-flex items-center gap-2 self-start rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-600 shadow-sm sm:self-auto"><svg class="h-4 w-4 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3M3 11h18M5 5h14a2 2 0 012 2v12a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2z" /></svg>{{ now()->format('d M Y') }}</div></div>
+        <div class="mb-8 grid gap-5 sm:grid-cols-2 xl:grid-cols-4">@foreach ($stats as $stat)<div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:shadow-md"><div class="flex items-start justify-between"><div><p class="text-sm font-medium text-slate-500">{{ $stat['label'] }}</p><p class="mt-3 text-3xl font-bold tracking-tight text-slate-900">{{ number_format($stat['value']) }}</p></div><span @class(['grid h-11 w-11 place-items-center rounded-xl', 'bg-blue-50 text-blue-600' => $stat['color'] === 'blue', 'bg-emerald-50 text-emerald-600' => $stat['color'] === 'emerald', 'bg-violet-50 text-violet-600' => $stat['color'] === 'violet', 'bg-amber-50 text-amber-600' => $stat['color'] === 'amber'])><svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="{{ $stat['icon'] }}" /></svg></span></div></div>@endforeach</div>
+        <div class="grid gap-6 lg:grid-cols-5">
+            <section class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm lg:col-span-3"><div class="mb-6"><h2 class="text-lg font-bold text-slate-900">Quick access</h2><p class="mt-1 text-sm text-slate-500">Jump directly to frequently used modules.</p></div><div class="grid gap-3 sm:grid-cols-2"><a href="{{ route('dealers.index') }}" class="flex items-center gap-3 rounded-xl border border-slate-200 p-4 transition hover:border-blue-200 hover:bg-blue-50"><span class="grid h-10 w-10 place-items-center rounded-lg bg-blue-600 text-white"><svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M4 7h16v13H4z M8 7V4h8v3 M4 12h16" /></svg></span><span><span class="block font-semibold text-slate-800">Dealers</span><span class="text-xs text-slate-500">Manage dealer network</span></span></a><a href="{{ route('customers.index') }}" class="flex items-center gap-3 rounded-xl border border-slate-200 p-4 transition hover:border-emerald-200 hover:bg-emerald-50"><span class="grid h-10 w-10 place-items-center rounded-lg bg-emerald-600 text-white"><svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2 M9 11a4 4 0 100-8 4 4 0 000 8z" /></svg></span><span><span class="block font-semibold text-slate-800">Farmers</span><span class="text-xs text-slate-500">Manage customer records</span></span></a><a href="{{ route('states.index') }}" class="flex items-center gap-3 rounded-xl border border-slate-200 p-4 transition hover:border-violet-200 hover:bg-violet-50"><span class="grid h-10 w-10 place-items-center rounded-lg bg-violet-600 text-white"><svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M12 22a10 10 0 100-20 10 10 0 000 20z M2 12h20" /></svg></span><span><span class="block font-semibold text-slate-800">Locations</span><span class="text-xs text-slate-500">States, districts and talukas</span></span></a><a href="{{ route('profile.edit') }}" class="flex items-center gap-3 rounded-xl border border-slate-200 p-4 transition hover:border-slate-300 hover:bg-slate-50"><span class="grid h-10 w-10 place-items-center rounded-lg bg-slate-700 text-white"><svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M12 15.5a3.5 3.5 0 100-7 3.5 3.5 0 000 7z" /></svg></span><span><span class="block font-semibold text-slate-800">Settings</span><span class="text-xs text-slate-500">Update your account</span></span></a></div></section>
+            <section class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm lg:col-span-2"><div class="mb-5"><h2 class="text-lg font-bold text-slate-900">System status</h2><p class="mt-1 text-sm text-slate-500">Arcadia ERP is operating normally.</p></div><dl class="divide-y divide-slate-100"><div class="flex items-center justify-between py-3"><dt class="text-sm text-slate-600">Application</dt><dd class="inline-flex items-center gap-1.5 text-sm font-semibold text-emerald-600"><span class="h-2 w-2 rounded-full bg-emerald-500"></span>Online</dd></div><div class="flex items-center justify-between py-3"><dt class="text-sm text-slate-600">Database</dt><dd class="text-sm font-semibold text-emerald-600">Connected</dd></div><div class="flex items-center justify-between py-3"><dt class="text-sm text-slate-600">Signed in as</dt><dd class="max-w-36 truncate text-sm font-semibold text-slate-800">{{ auth()->user()->email }}</dd></div><div class="flex items-center justify-between py-3"><dt class="text-sm text-slate-600">Version</dt><dd class="text-sm font-semibold text-slate-800">v1.0.0</dd></div></dl></section>
         </div>
-
-        <!-- Dashboard Cards -->
-        <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mb-8">
-
-            <div class="bg-blue-600 rounded-xl shadow-lg p-6 text-white">
-                <p class="text-lg">👨‍💼 Dealers</p>
-                <h2 class="text-4xl font-bold mt-3">0</h2>
-            </div>
-
-            <div class="bg-green-600 rounded-xl shadow-lg p-6 text-white">
-                <p class="text-lg">👨‍🌾 Farmers</p>
-                <h2 class="text-4xl font-bold mt-3">0</h2>
-            </div>
-
-            <div class="bg-yellow-500 rounded-xl shadow-lg p-6 text-white">
-                <p class="text-lg">📑 Bookings</p>
-                <h2 class="text-4xl font-bold mt-3">0</h2>
-            </div>
-
-            <div class="bg-red-600 rounded-xl shadow-lg p-6 text-white">
-                <p class="text-lg">🚚 Dispatch</p>
-                <h2 class="text-4xl font-bold mt-3">0</h2>
-            </div>
-
-        </div>
-
-        <!-- Quick Menu + ERP Status -->
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
-
-            <!-- Quick Menu -->
-            <div class="bg-white rounded-xl shadow-lg p-6">
-
-                <h2 class="text-2xl font-bold mb-6 text-gray-700">
-                    Quick Menu
-                </h2>
-
-                <div class="grid grid-cols-2 gap-4">
-
-                    <a href="{{ route('dealers.index') }}"
-                        class="bg-blue-600 hover:bg-blue-700 text-white text-center py-4 rounded-lg font-semibold transition">
-                        👨‍💼 Dealers
-                    </a>
-
-                    <a href="{{ route('customers.index') }}"
-                        class="bg-green-600 hover:bg-green-700 text-white text-center py-4 rounded-lg font-semibold transition">
-                        👨‍🌾 Farmers
-                    </a>
-
-                    <a href="#"
-                        class="bg-yellow-500 hover:bg-yellow-600 text-white text-center py-4 rounded-lg font-semibold transition">
-                        📑 Booking
-                    </a>
-
-                    <a href="#"
-                        class="bg-red-600 hover:bg-red-700 text-white text-center py-4 rounded-lg font-semibold transition">
-                        🚚 Dispatch
-                    </a>
-
-                    <a href="#"
-                        class="bg-purple-600 hover:bg-purple-700 text-white text-center py-4 rounded-lg font-semibold transition">
-                        💰 Payment
-                    </a>
-
-                    <a href="#"
-                        class="bg-gray-800 hover:bg-gray-900 text-white text-center py-4 rounded-lg font-semibold transition">
-                        📦 Stock
-                    </a>
-
-                </div>
-
-            </div>
-
-            <!-- ERP Status -->
-            <div class="bg-white rounded-xl shadow-lg p-6">
-
-                <h2 class="text-2xl font-bold mb-6 text-gray-700">
-                    ERP Status
-                </h2>
-
-                <table class="w-full">
-
-                    <tbody>
-
-                        <tr class="border-b">
-                            <td class="py-3 font-semibold">System</td>
-                            <td class="text-green-600 font-bold">Running</td>
-                        </tr>
-
-                        <tr class="border-b">
-                            <td class="py-3 font-semibold">Database</td>
-                            <td class="text-green-600 font-bold">Connected</td>
-                        </tr>
-
-                        <tr class="border-b">
-                            <td class="py-3 font-semibold">Logged User</td>
-                            <td>{{ Auth::user()->name }}</td>
-                        </tr>
-
-                        <tr class="border-b">
-                            <td class="py-3 font-semibold">Role</td>
-                            <td>Administrator</td>
-                        </tr>
-
-                        <tr>
-                            <td class="py-3 font-semibold">Version</td>
-                            <td>Arcadia ERP v1.0</td>
-                        </tr>
-
-                    </tbody>
-
-                </table>
-
-            </div>
-
-        </div>
-
     </div>
-
 </x-app-layout>
