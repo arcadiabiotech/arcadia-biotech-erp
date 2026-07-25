@@ -1,5 +1,27 @@
 <x-app-layout>
-    <div class="mx-auto max-w-4xl">
+    <div
+        class="mx-auto max-w-4xl"
+        x-data="{
+            farmers: {{ Js::from($farmers->map(fn ($f) => ['id' => (string) $f->id, 'name' => $f->farmer_name, 'dealer_id' => (string) $f->dealer_id])) }},
+            dealers: {{ Js::from($dealers->map(fn ($d) => ['id' => (string) $d->id, 'name' => $d->dealer_name])) }},
+            dealerId: '{{ old('dealer_id', $booking->dealer_id) }}',
+            farmerId: '{{ old('farmer_id', $booking->farmer_id) }}',
+            get visibleFarmers() { return this.farmers.filter(f => f.dealer_id === this.dealerId) },
+            get quickAddDealerId() { return this.dealerId },
+            get quickAddDealerName() {
+                const dealer = this.dealers.find(d => d.id === this.dealerId);
+                return dealer ? dealer.name : '';
+            },
+            farmerRegistered(farmer) {
+                this.farmers.push({ id: String(farmer.id), name: farmer.farmer_name, dealer_id: String(farmer.dealer_id) });
+                this.farmerId = String(farmer.id);
+            },
+            dealerRegistered(dealer) {
+                this.dealers.push({ id: String(dealer.id), name: dealer.dealer_name });
+                this.dealerId = String(dealer.id);
+            },
+        }"
+    >
         <div class="mb-8">
             <a href="{{ $booking->exists ? route('bookings.show', $booking) : route('bookings.index') }}" class="text-sm font-semibold text-blue-600 hover:text-blue-800">← Back</a>
             <h1 class="mt-3 text-3xl font-bold text-slate-900">{{ $booking->exists ? 'Edit booking' : 'New booking' }}</h1>
@@ -7,11 +29,6 @@
         </div>
 
         <form
-            x-data="{
-                farmers: {{ Js::from($farmers->map(fn ($f) => ['id' => (string) $f->id, 'name' => $f->farmer_name, 'dealer_id' => (string) $f->dealer_id])) }},
-                dealerId: '{{ old('dealer_id', $booking->dealer_id) }}',
-                get visibleFarmers() { return this.farmers.filter(f => f.dealer_id === this.dealerId) },
-            }"
             method="POST" action="{{ $booking->exists ? route('bookings.update', $booking) : route('bookings.store') }}"
             class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
             @csrf @if($booking->exists) @method('PUT') @endif
@@ -22,17 +39,24 @@
                     <label class="text-sm font-semibold text-slate-700">Dealer</label>
                     <select name="dealer_id" x-model="dealerId" required class="mt-2 block w-full rounded-xl border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
                         <option value="">— Select dealer —</option>
-                        @foreach($dealers as $dealer)<option value="{{ $dealer->id }}">{{ $dealer->dealer_name }}</option>@endforeach
+                        <template x-for="dealer in dealers" :key="dealer.id"><option :value="dealer.id" x-text="dealer.name"></option></template>
                     </select>
                     @error('dealer_id')<p class="mt-1 text-sm text-rose-600">{{ $message }}</p>@enderror
+                    <button type="button" @click="$dispatch('open-modal', 'register-dealer')" class="mt-1 text-xs font-semibold text-emerald-600 hover:text-emerald-800">+ Register new dealer</button>
                 </div>
                 <div>
                     <label class="text-sm font-semibold text-slate-700">Farmer</label>
-                    <select name="farmer_id" required class="mt-2 block w-full rounded-xl border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                    <select name="farmer_id" x-model="farmerId" required class="mt-2 block w-full rounded-xl border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
                         <option value="">— Select farmer —</option>
-                        <template x-for="farmer in visibleFarmers" :key="farmer.id"><option :value="farmer.id" x-text="farmer.name" :selected="farmer.id === '{{ old('farmer_id', $booking->farmer_id) }}'"></option></template>
+                        <template x-for="farmer in visibleFarmers" :key="farmer.id"><option :value="farmer.id" x-text="farmer.name"></option></template>
                     </select>
                     @error('farmer_id')<p class="mt-1 text-sm text-rose-600">{{ $message }}</p>@enderror
+                    <button
+                        type="button" @click="$dispatch('open-modal', 'register-farmer')" :disabled="! dealerId"
+                        :title="! dealerId ? 'Select a dealer first' : ''"
+                        class="mt-1 text-xs font-semibold text-emerald-600 hover:text-emerald-800 disabled:cursor-not-allowed disabled:text-slate-300 disabled:hover:text-slate-300">
+                        + Register new farmer under this dealer
+                    </button>
                 </div>
             </div>
 
@@ -69,5 +93,8 @@
                 <button class="rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-blue-700">{{ $booking->exists ? 'Save changes' : 'Create booking' }}</button>
             </div>
         </form>
+
+        <x-quick-register-farmer-modal :states="$states" :districts="$districts" :talukas="$talukas" :villages="$villages" />
+        <x-quick-register-dealer-modal />
     </div>
 </x-app-layout>

@@ -36,8 +36,12 @@ class BookingPolicy
             return false;
         }
 
-        // Dealer never creates bookings — view only.
-        return $user->hasRole(['super-admin', 'admin', 'marketing', 'accounts']);
+        // Dealer never creates bookings — view only. dispatch-planner is
+        // included so the Dispatch Plan form's inline "Create Booking"
+        // modal can post to bookings.store without leaving the page — same
+        // pattern as farmers.create/dealers.create for that form's other
+        // quick-add modals (see FarmerPolicy::create()/DealerPolicy::create()).
+        return $user->hasRole(['super-admin', 'admin', 'marketing', 'accounts', 'dispatch-planner']);
     }
 
     /**

@@ -19,6 +19,7 @@
                 get visibleVillages() { return this.villages.filter(v => v.taluka_id === this.talukaId) },
             }"
             method="POST" action="{{ $farmer->exists ? route('farmers.update', $farmer) : route('farmers.store') }}"
+            @if(! $farmer->exists) onsubmit="return window.arcadiaCheckOtpVerified(this, 'mobile_verified_flag')" @endif
             class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
             @csrf @if($farmer->exists) @method('PUT') @endif
 
@@ -46,7 +47,11 @@
                     @error('status')<p class="mt-1 text-sm text-rose-600">{{ $message }}</p>@enderror
                 </div>
 
-                <div><label class="text-sm font-semibold text-slate-700">Mobile</label><input name="mobile" value="{{ old('mobile', $farmer->mobile) }}" required maxlength="10" class="mt-2 block w-full rounded-xl border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">@error('mobile')<p class="mt-1 text-sm text-rose-600">{{ $message }}</p>@enderror</div>
+                @if($farmer->exists)
+                    <div><label class="text-sm font-semibold text-slate-700">Mobile</label><input name="mobile" value="{{ old('mobile', $farmer->mobile) }}" required maxlength="10" class="mt-2 block w-full rounded-xl border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">@error('mobile')<p class="mt-1 text-sm text-rose-600">{{ $message }}</p>@enderror</div>
+                @else
+                    <div><x-otp-mobile-gate context="farmer" name="mobile" /></div>
+                @endif
                 <div><label class="text-sm font-semibold text-slate-700">Alternate mobile</label><input name="alternate_mobile" value="{{ old('alternate_mobile', $farmer->alternate_mobile) }}" maxlength="10" class="mt-2 block w-full rounded-xl border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">@error('alternate_mobile')<p class="mt-1 text-sm text-rose-600">{{ $message }}</p>@enderror</div>
                 <div><label class="text-sm font-semibold text-slate-700">Aadhaar number</label><input name="aadhaar_no" value="{{ old('aadhaar_no', $farmer->aadhaar_no) }}" maxlength="12" class="mt-2 block w-full rounded-xl border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">@error('aadhaar_no')<p class="mt-1 text-sm text-rose-600">{{ $message }}</p>@enderror</div>
             </div>

@@ -13,10 +13,15 @@ class DealerPolicy
      * with no default reason (e.g. Staff) fall through to the permission
      * check, so granting them dealers.view via the Roles UI is all that's
      * needed to admit them — no code change required.
+     *
+     * Role-based access refactor: Accounts is deliberately excluded —
+     * "Dealers" is not in Accounts' current menu — and the seeder no
+     * longer grants Accounts the dealers.view permission, so the fallback
+     * below can't silently readmit them either.
      */
     public function viewAny(User $user): bool
     {
-        return $user->hasRole(['super-admin', 'admin', 'marketing', 'dealer', 'accounts'])
+        return $user->hasRole(['super-admin', 'admin', 'marketing', 'dealer'])
             || $user->hasPermission('dealers.view');
     }
 
@@ -39,9 +44,19 @@ class DealerPolicy
         return $user->hasPermission('dealers.view');
     }
 
+    /**
+     * User hierarchy refactor: Marketing may now create Dealers directly
+     * (DealerController::store() auto-links the new dealer to the creating
+     * Marketing user via DealerAssignment — the same mechanism Admin uses
+     * to manually assign a dealer, just triggered automatically instead of
+     * requiring a separate admin step).
+     * Dispatch Planner and Accounts also gained this: the dispatch plan
+     * form's and booking form's "register new dealer" modals need them to
+     * be able to hit dealers.store inline without leaving the page.
+     */
     public function create(User $user): bool
     {
-        return $user->hasRole(['super-admin', 'admin']) && $user->hasPermission('dealers.create');
+        return $user->hasRole(['super-admin', 'admin', 'marketing', 'dispatch-planner', 'accounts']) && $user->hasPermission('dealers.create');
     }
 
     public function update(User $user, Dealer $dealer): bool

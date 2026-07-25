@@ -78,36 +78,51 @@ class StockReservationService
     }
 
     /**
-     * Booking Cancelled / Rejected -> Release Reservation. $status
-     * ('cancelled' or 'released') records which of the two triggered it.
+     * Booking Cancelled / Rejected -> Release Reservation, or (with $qty) a
+     * farmer rejecting part of a delivered shipment -> the rejected portion
+     * goes back to available stock. $status ('cancelled' or 'released')
+     * records which of the two triggered a full release; a reservation that
+     * has ever had anything converted stays 'converted' once fully
+     * resolved, since some of the booking genuinely did ship.
      */
-    public function release(Booking $booking, string $status, ?int $actorId = null): void
+    public function release(Booking $booking, string $status, ?int $actorId = null, ?int $qty = null): void
     {
-        DB::transaction(function () use ($booking, $status, $actorId) {
+        DB::transaction(function () use ($booking, $status, $actorId, $qty) {
             $reservation = StockReservation::where('booking_id', $booking->id)->lockForUpdate()->first();
 
             if (! $reservation || $reservation->status !== 'reserved') {
                 return;
             }
 
+            $qty = min($qty ?? $reservation->reserved_qty, $reservation->reserved_qty);
+
             $original = $reservation->toArray();
 
-            $reservation->update([
-                'released_qty' => $reservation->reserved_qty,
-                'status' => $status,
-                'updated_by' => $actorId,
-            ]);
+            $reservation->reserved_qty -= $qty;
+            $reservation->released_qty += $qty;
 
-            ActivityLog::record('stock_reservations', $reservation->id, 'update', $original, $reservation->fresh()->toArray(), ucfirst($status).' — '.$booking->booking_no);
+            if ($reservation->reserved_qty <= 0) {
+                $reservation->status = $reservation->converted_qty > 0 ? 'converted' : $status;
+            }
+
+            $reservation->updated_by = $actorId;
+            $reservation->save();
+
+            ActivityLog::record('stock_reservations', $reservation->id, 'update', $original, $reservation->fresh()->toArray(), ucfirst($status)." {$qty} — ".$booking->booking_no);
         });
     }
 
     /**
      * Dispatch Completed -> Convert Reservation into an actual stock issue.
+     * $qty defaults to the reservation's full remaining amount (the
+     * original one-shot behavior); passing a smaller $qty converts only
+     * that much, leaving the rest of the reservation active — the case
+     * where a farmer rejects part of a delivered line and only the
+     * accepted portion is converted to a real stock deduction.
      */
-    public function convert(Booking $booking, ?int $actorId = null): void
+    public function convert(Booking $booking, ?int $qty = null, ?int $actorId = null): void
     {
-        DB::transaction(function () use ($booking, $actorId) {
+        DB::transaction(function () use ($booking, $qty, $actorId) {
             $reservation = StockReservation::where('booking_id', $booking->id)->lockForUpdate()->first();
 
             if (! $reservation) {
@@ -118,16 +133,31 @@ class StockReservationService
                 throw ValidationException::withMessages(['dispatch_status' => 'Only an active reservation can be converted.']);
             }
 
+            $qty ??= $reservation->reserved_qty;
+
+            if ($qty > $reservation->reserved_qty) {
+                throw ValidationException::withMessages(['dispatch_status' => "Cannot convert {$qty} plants — only {$reservation->reserved_qty} still reserved for this booking."]);
+            }
+
             $stock = $this->lockedStock($reservation->variety);
             $stock->update([
-                'actual_qty' => max(0, $stock->actual_qty - $reservation->reserved_qty),
+                'actual_qty' => max(0, $stock->actual_qty - $qty),
                 'updated_by' => $actorId,
             ]);
 
             $original = $reservation->toArray();
-            $reservation->update(['status' => 'converted', 'updated_by' => $actorId]);
 
-            ActivityLog::record('stock_reservations', $reservation->id, 'update', $original, $reservation->fresh()->toArray(), 'Converted to stock issue — '.$booking->booking_no);
+            $reservation->reserved_qty -= $qty;
+            $reservation->converted_qty += $qty;
+
+            if ($reservation->reserved_qty <= 0) {
+                $reservation->status = 'converted';
+            }
+
+            $reservation->updated_by = $actorId;
+            $reservation->save();
+
+            ActivityLog::record('stock_reservations', $reservation->id, 'update', $original, $reservation->fresh()->toArray(), "Converted {$qty} to stock issue — ".$booking->booking_no);
         });
     }
 

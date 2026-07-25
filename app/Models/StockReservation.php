@@ -15,6 +15,7 @@ class StockReservation extends Model
         'variety',
         'reserved_qty',
         'released_qty',
+        'converted_qty',
         'status',
         'created_by',
         'updated_by',
@@ -23,6 +24,7 @@ class StockReservation extends Model
     protected $casts = [
         'reserved_qty' => 'integer',
         'released_qty' => 'integer',
+        'converted_qty' => 'integer',
     ];
 
     public function booking()

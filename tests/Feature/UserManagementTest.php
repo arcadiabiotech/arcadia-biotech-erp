@@ -26,6 +26,8 @@ test('admin can create a user', function () {
     $admin = roleUser('admin');
     $marketingRole = Role::where('name', 'marketing')->first();
 
+    verifyMobileOtp('9876543210');
+
     $response = $this->actingAs($admin)->post(route('users.store'), [
         'name' => 'New Marketer',
         'username' => 'new-marketer',
@@ -73,7 +75,9 @@ test('accounts role can create bookings and payments but cannot approve bookings
     expect($accounts->hasPermission('bookings.create'))->toBeTrue();
     expect($accounts->hasPermission('payments.create'))->toBeTrue();
     expect($accounts->hasPermission('challans.create'))->toBeTrue();
-    expect($accounts->hasPermission('invoices.create'))->toBeTrue();
+    // Role-based access refactor: Invoices is now Admin/Super Admin only —
+    // Accounts lost invoices.create (see PermissionSeeder's role matrix).
+    expect($accounts->hasPermission('invoices.create'))->toBeFalse();
     expect($accounts->hasPermission('bookings.approve'))->toBeFalse();
     expect($accounts->hasPermission('bookings.reject'))->toBeFalse();
     expect($accounts->hasPermission('bookings.hold'))->toBeFalse();
@@ -225,7 +229,7 @@ test('logging in records last login time, ip and an activity log entry', functio
     $admin->forceFill(['password' => bcrypt('password123')])->save();
 
     $this->post(route('login'), [
-        'email' => $admin->email,
+        'login' => $admin->username,
         'password' => 'password123',
     ]);
 

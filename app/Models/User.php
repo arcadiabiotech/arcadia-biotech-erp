@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasRating;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Foundation\Auth\User as Authenticatable;
@@ -10,7 +11,7 @@ use Illuminate\Support\Facades\Storage;
 
 class User extends Authenticatable
 {
-    use HasFactory, Notifiable, SoftDeletes;
+    use HasFactory, Notifiable, SoftDeletes, HasRating;
 
     /**
      * The attributes that are mass assignable.
@@ -20,6 +21,7 @@ class User extends Authenticatable
         'username',
         'email',
         'mobile',
+        'mobile_verified_at',
         'role_id',
         'dealer_id',
         'password',
@@ -27,6 +29,7 @@ class User extends Authenticatable
         'profile_photo',
         'last_login_at',
         'last_login_ip',
+        'last_login_device',
     ];
 
     /**
@@ -44,6 +47,7 @@ class User extends Authenticatable
     {
         return [
             'email_verified_at' => 'datetime',
+            'mobile_verified_at' => 'datetime',
             'password' => 'hashed',
             'status' => 'boolean',
             'last_login_at' => 'datetime',

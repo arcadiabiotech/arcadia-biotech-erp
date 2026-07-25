@@ -19,6 +19,7 @@
                 get visibleVillages() { return this.villages.filter(v => v.taluka_id === this.talukaId) },
             }"
             method="POST" action="{{ $dealer->exists ? route('dealers.update', $dealer) : route('dealers.store') }}"
+            @if(! $dealer->exists) onsubmit="return window.arcadiaCheckOtpVerified(this, 'mobile_verified_flag')" @endif
             class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
             @csrf @if($dealer->exists) @method('PUT') @endif
 
@@ -26,7 +27,11 @@
             <div class="grid gap-6 sm:grid-cols-2">
                 <div><label class="text-sm font-semibold text-slate-700">Firm name</label><input name="firm_name" value="{{ old('firm_name', $dealer->firm_name) }}" required class="mt-2 block w-full rounded-xl border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">@error('firm_name')<p class="mt-1 text-sm text-rose-600">{{ $message }}</p>@enderror</div>
                 <div><label class="text-sm font-semibold text-slate-700">Dealer name</label><input name="dealer_name" value="{{ old('dealer_name', $dealer->dealer_name) }}" required class="mt-2 block w-full rounded-xl border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">@error('dealer_name')<p class="mt-1 text-sm text-rose-600">{{ $message }}</p>@enderror</div>
-                <div><label class="text-sm font-semibold text-slate-700">Mobile</label><input name="mobile" value="{{ old('mobile', $dealer->mobile) }}" required maxlength="10" class="mt-2 block w-full rounded-xl border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">@error('mobile')<p class="mt-1 text-sm text-rose-600">{{ $message }}</p>@enderror</div>
+                @if($dealer->exists)
+                    <div><label class="text-sm font-semibold text-slate-700">Mobile</label><input name="mobile" value="{{ old('mobile', $dealer->mobile) }}" required maxlength="10" class="mt-2 block w-full rounded-xl border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">@error('mobile')<p class="mt-1 text-sm text-rose-600">{{ $message }}</p>@enderror</div>
+                @else
+                    <div><x-otp-mobile-gate context="dealer" name="mobile" /></div>
+                @endif
                 <div><label class="text-sm font-semibold text-slate-700">WhatsApp</label><input name="whatsapp" value="{{ old('whatsapp', $dealer->whatsapp) }}" maxlength="10" class="mt-2 block w-full rounded-xl border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">@error('whatsapp')<p class="mt-1 text-sm text-rose-600">{{ $message }}</p>@enderror</div>
                 <div><label class="text-sm font-semibold text-slate-700">Email</label><input type="email" name="email" value="{{ old('email', $dealer->email) }}" class="mt-2 block w-full rounded-xl border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">@error('email')<p class="mt-1 text-sm text-rose-600">{{ $message }}</p>@enderror</div>
                 <div>

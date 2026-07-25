@@ -8,6 +8,7 @@
             </div>
             <div class="flex items-center gap-3">
                 <span @class(['inline-flex rounded-full px-3 py-1.5 text-xs font-semibold', 'bg-emerald-100 text-emerald-700' => $dealer->status, 'bg-slate-100 text-slate-600' => ! $dealer->status])>{{ $dealer->status ? 'Active' : 'Inactive' }}</span>
+                <x-rating-control type="dealer" :model="$dealer" :can-edit="auth()->user()->hasRole('super-admin')" />
                 @can('update', $dealer)<a href="{{ route('dealers.edit', $dealer) }}" class="rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-blue-700">Edit dealer</a>@endcan
             </div>
         </div>
@@ -18,6 +19,7 @@
             <button type="button" @click="tab = 'profile'" :class="tab === 'profile' ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-100'" class="flex-1 rounded-lg px-4 py-2 text-sm font-semibold transition">Profile</button>
             <button type="button" @click="tab = 'ledger'" :class="tab === 'ledger' ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-100'" class="flex-1 rounded-lg px-4 py-2 text-sm font-semibold transition">Ledger</button>
             <button type="button" @click="tab = 'documents'" :class="tab === 'documents' ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-100'" class="flex-1 rounded-lg px-4 py-2 text-sm font-semibold transition">Documents</button>
+            <button type="button" @click="tab = 'ratings'" :class="tab === 'ratings' ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-100'" class="flex-1 rounded-lg px-4 py-2 text-sm font-semibold transition">Ratings</button>
             <button type="button" @click="tab = 'history'" :class="tab === 'history' ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-100'" class="flex-1 rounded-lg px-4 py-2 text-sm font-semibold transition">Audit history</button>
         </div>
 
@@ -68,6 +70,10 @@
         <div x-show="tab === 'documents'" class="rounded-2xl border border-dashed border-slate-300 bg-white p-12 text-center">
             <p class="text-lg font-semibold text-slate-700">Dealer documents</p>
             <p class="mx-auto mt-2 max-w-sm text-sm text-slate-500">Agreement copies, GST/PAN proofs and other uploaded documents will appear here once the Documents module is built.</p>
+        </div>
+
+        <div x-show="tab === 'ratings'" x-cloak>
+            <x-rating-history-list :history="$ratingHistory" />
         </div>
 
         <div x-show="tab === 'history'" class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">

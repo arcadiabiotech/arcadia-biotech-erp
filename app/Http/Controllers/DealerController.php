@@ -6,17 +6,22 @@ use App\Http\Requests\DealerStoreRequest;
 use App\Http\Requests\DealerUpdateRequest;
 use App\Models\ActivityLog;
 use App\Models\Dealer;
+use App\Models\DealerAssignment;
 use App\Models\District;
+use App\Models\RatingHistory;
 use App\Models\State;
 use App\Models\Taluka;
 use App\Models\Village;
+use App\Services\OtpService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 class DealerController extends Controller
 {
-    public function __construct()
-    {
+    public function __construct(
+        private readonly OtpService $otp,
+    ) {
         $this->authorizeResource(Dealer::class, 'dealer');
     }
 
@@ -66,12 +71,55 @@ class DealerController extends Controller
     public function store(DealerStoreRequest $request)
     {
         $data = $this->prepared($request);
+
+        // Registration rule: a Dealer cannot be created until its mobile
+        // number has been OTP-verified. This is the authoritative,
+        // server-side gate — the OTP UI on the form is a courtesy only.
+        if (! $this->otp->isVerified($data['mobile'], 'registration')) {
+            throw ValidationException::withMessages([
+                'mobile' => 'Please verify this mobile number via OTP before registering the dealer.',
+            ]);
+        }
+
         $data['dealer_code'] = $this->nextDealerCode();
         $data['created_by'] = $request->user()->id;
 
-        $dealer = Dealer::create($data);
+        $dealer = DB::transaction(function () use ($data, $request) {
+            $dealer = Dealer::create($data);
+
+            // User hierarchy: a Dealer created by a Marketing user belongs
+            // to that Marketing user automatically — the same
+            // DealerAssignment mechanism Admin uses via the Dealer
+            // Assignments screen, just triggered by the creator instead of
+            // requiring a separate admin step.
+            if ($request->user()->hasRole('marketing')) {
+                DealerAssignment::create([
+                    'dealer_id' => $dealer->id,
+                    'marketing_user_id' => $request->user()->id,
+                    'assigned_by' => $request->user()->id,
+                    'assigned_date' => now()->toDateString(),
+                    'status' => true,
+                ]);
+            }
+
+            return $dealer;
+        });
+
+        $this->otp->consume($data['mobile'], 'registration');
 
         ActivityLog::record('dealers', $dealer->id, 'create', [], $dealer->toArray());
+
+        // Dispatch plan's and booking form's inline "register new dealer"
+        // modals post here via fetch() with Accept: application/json
+        // instead of a normal browser form submit — give it back the
+        // fields it needs to select the new dealer without a page reload,
+        // rather than the usual redirect (mirrors FarmerController::store()).
+        if ($request->wantsJson()) {
+            return response()->json([
+                'ok' => true,
+                'dealer' => $dealer->only(['id', 'dealer_name', 'firm_name', 'dealer_code']),
+            ]);
+        }
 
         return redirect()->route('dealers.index')->with('success', 'Dealer registered successfully.');
     }
@@ -82,11 +130,12 @@ class DealerController extends Controller
      */
     public function show(Dealer $dealer)
     {
-        $dealer->load(['state', 'district', 'taluka', 'village', 'assignment.marketingUser', 'createdBy', 'updatedBy']);
+        $dealer->load(['state', 'district', 'taluka', 'village', 'assignment.marketingUser', 'createdBy', 'updatedBy', 'ratingRecord']);
 
         $activity = ActivityLog::where('module', 'dealers')->where('record_id', $dealer->id)->latest()->limit(20)->get();
+        $ratingHistory = RatingHistory::where('module', 'dealer')->where('rateable_id', $dealer->id)->latest('created_at')->get();
 
-        return view('dealers.show', compact('dealer', 'activity'));
+        return view('dealers.show', compact('dealer', 'activity', 'ratingHistory'));
     }
 
     public function edit(Dealer $dealer)

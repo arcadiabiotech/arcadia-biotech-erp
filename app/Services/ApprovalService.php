@@ -32,9 +32,10 @@ class ApprovalService
         User $actor,
         ?string $remarks,
         string $recordLabel,
-        Collection|array $notify = []
+        Collection|array $notify = [],
+        ?string $signature = null,
     ): Approval {
-        return DB::transaction(function () use ($moduleName, $recordId, $level, $status, $actor, $remarks, $recordLabel, $notify) {
+        return DB::transaction(function () use ($moduleName, $recordId, $level, $status, $actor, $remarks, $recordLabel, $notify, $signature) {
             Approval::firstOrCreate(
                 ['module_name' => $moduleName, 'record_id' => $recordId, 'approval_level' => $level],
                 ['status' => 'draft']
@@ -48,6 +49,10 @@ class ApprovalService
             $original = $approval->toArray();
 
             $attributes = ['status' => $status, 'remarks' => $remarks];
+
+            if ($signature !== null) {
+                $attributes['signature'] = $signature;
+            }
 
             match ($status) {
                 'verified', 'approved', 'completed' => $attributes += ['approved_by' => $actor->id, 'approved_at' => now()],

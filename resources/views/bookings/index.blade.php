@@ -89,7 +89,11 @@
                         @forelse($bookings as $booking)
                             <tr class="hover:bg-slate-50">
                                 <td class="px-6 py-4">
-                                    <p class="font-semibold text-slate-900">{{ $booking->booking_no }}</p>
+                                    <p class="font-semibold text-slate-900">{{ $booking->booking_no }}
+                                        @if($booking->sale_type === 'spot')
+                                            <span class="ml-1 inline-flex rounded-full bg-purple-100 px-2 py-0.5 text-[10px] font-semibold text-purple-700">Spot</span>
+                                        @endif
+                                    </p>
                                     <p class="mt-0.5 text-xs text-slate-500">{{ $booking->variety }} · {{ $booking->booking_date->format('d M Y') }}</p>
                                 </td>
                                 <td class="px-6 py-4 text-sm text-slate-600">{{ $booking->dealer?->dealer_name }}<br><span class="text-xs text-slate-400">{{ $booking->farmer?->farmer_name }}</span></td>

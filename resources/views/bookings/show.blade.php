@@ -3,7 +3,11 @@
         <div class="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
             <div>
                 <a href="{{ route('bookings.index') }}" class="text-sm font-semibold text-blue-600 hover:text-blue-800">← Back to bookings</a>
-                <h1 class="mt-3 text-3xl font-bold text-slate-900">{{ $booking->booking_no }}</h1>
+                <h1 class="mt-3 text-3xl font-bold text-slate-900">{{ $booking->booking_no }}
+                    @if($booking->sale_type === 'spot')
+                        <span class="ml-1 inline-flex rounded-full bg-purple-100 px-2.5 py-1 align-middle text-xs font-semibold text-purple-700">Spot sale</span>
+                    @endif
+                </h1>
                 <p class="mt-2 text-sm text-slate-500">{{ $booking->dealer?->dealer_name }} · {{ $booking->farmer?->farmer_name }}</p>
             </div>
             <div class="flex flex-wrap items-center gap-2">

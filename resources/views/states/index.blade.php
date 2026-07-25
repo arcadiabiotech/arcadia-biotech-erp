@@ -1,5 +1,4 @@
-<div style="background:red;color:white;padding:20px;font-size:40px">
-    TEST 12345
+
 </div>
 <x-app-layout>
 

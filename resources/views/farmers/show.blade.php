@@ -8,6 +8,7 @@
             </div>
             <div class="flex items-center gap-3">
                 <span @class(['inline-flex rounded-full px-3 py-1.5 text-xs font-semibold', 'bg-emerald-100 text-emerald-700' => $farmer->status, 'bg-slate-100 text-slate-600' => ! $farmer->status])>{{ $farmer->status ? 'Active' : 'Inactive' }}</span>
+                <x-rating-control type="farmer" :model="$farmer" :can-edit="auth()->user()->hasRole('super-admin')" />
                 @can('update', $farmer)<a href="{{ route('farmers.edit', $farmer) }}" class="rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-blue-700">Edit farmer</a>@endcan
             </div>
         </div>
@@ -15,7 +16,7 @@
         @if (session('success'))<div class="mb-5 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700">{{ session('success') }}</div>@endif
 
         <div class="mb-6 flex flex-wrap gap-1 rounded-xl border border-slate-200 bg-white p-1 shadow-sm">
-            @foreach(['profile' => 'Profile', 'timeline' => 'Timeline', 'documents' => 'Documents', 'plantation' => 'Plantation', 'booking' => 'Booking', 'ledger' => 'Ledger', 'history' => 'Audit history'] as $key => $label)
+            @foreach(['profile' => 'Profile', 'timeline' => 'Timeline', 'documents' => 'Documents', 'plantation' => 'Plantation', 'booking' => 'Booking', 'ledger' => 'Ledger', 'ratings' => 'Ratings', 'history' => 'Audit history'] as $key => $label)
                 <button type="button" @click="tab = '{{ $key }}'" :class="tab === '{{ $key }}' ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-100'" class="rounded-lg px-4 py-2 text-sm font-semibold transition">{{ $label }}</button>
             @endforeach
         </div>
@@ -91,6 +92,10 @@
         <div x-show="tab === 'ledger'" class="rounded-2xl border border-dashed border-slate-300 bg-white p-12 text-center">
             <p class="text-lg font-semibold text-slate-700">Farmer ledger</p>
             <p class="mx-auto mt-2 max-w-sm text-sm text-slate-500">Payment and outstanding-balance history for this farmer will appear here once the Ledger module is built.</p>
+        </div>
+
+        <div x-show="tab === 'ratings'" x-cloak>
+            <x-rating-history-list :history="$ratingHistory" />
         </div>
 
         <div x-show="tab === 'history'" class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">

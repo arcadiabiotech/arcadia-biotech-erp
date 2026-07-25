@@ -5,18 +5,23 @@ namespace App\Http\Controllers;
 use App\Models\ActivityLog;
 use App\Models\Dealer;
 use App\Models\DealerAssignment;
+use App\Models\RatingHistory;
 use App\Models\Role;
 use App\Models\User;
+use App\Services\OtpService;
+use App\Support\TextCasing;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 class UserController extends Controller
 {
-    public function __construct()
-    {
+    public function __construct(
+        private readonly OtpService $otp,
+    ) {
         $this->authorizeResource(User::class, 'user');
     }
 
@@ -66,7 +71,21 @@ class UserController extends Controller
             'Only a Super Admin can create another Super Admin.'
         );
 
+        // Registration rule: a Marketing User cannot be created until its
+        // mobile number has been OTP-verified. Scoped to the Marketing
+        // role specifically (the one flow the spec calls out) — other
+        // roles created here are unaffected.
+        if ($role?->name === 'marketing' && ! $this->otp->isVerified($data['mobile'], 'registration')) {
+            throw ValidationException::withMessages([
+                'mobile' => 'Please verify this mobile number via OTP before creating the marketing user.',
+            ]);
+        }
+
         $data['password'] = Hash::make($data['password']);
+
+        if ($role?->name === 'marketing') {
+            $data['mobile_verified_at'] = now();
+        }
 
         if ($request->hasFile('profile_photo')) {
             $data['profile_photo'] = $request->file('profile_photo')->store('profile-photos', 'public');
@@ -82,6 +101,10 @@ class UserController extends Controller
             return $user;
         });
 
+        if ($role?->name === 'marketing') {
+            $this->otp->consume($data['mobile'], 'registration');
+        }
+
         ActivityLog::record('users', $user->id, 'create', [], $user->toArray());
 
         return to_route('users.index')->with('success', 'User created successfully.');
@@ -95,6 +118,7 @@ class UserController extends Controller
             'dealers' => Dealer::orderBy('dealer_name')->get(),
             'assignedDealerIds' => $user->dealerAssignments()->pluck('dealer_id')->all(),
             'activity' => ActivityLog::where('module', 'users')->where('record_id', $user->id)->latest()->limit(10)->get(),
+            'ratingHistory' => RatingHistory::where('module', 'user')->where('rateable_id', $user->id)->latest('created_at')->get(),
         ]);
     }
 
@@ -193,6 +217,10 @@ class UserController extends Controller
         // dealer_ids and profile_photo aren't user columns; handled separately.
         unset($data['dealer_ids'], $data['profile_photo']);
 
+        // Title-cased display name, same convention as the rest of the
+        // app's proper-noun fields (CapitalizesNames trait).
+        $data['name'] = TextCasing::titleCase($data['name']);
+
         $role = Role::find($data['role_id']);
 
         if ($role?->name === 'dealer') {
@@ -224,7 +252,10 @@ class UserController extends Controller
     /**
      * Reconcile which dealers this marketing user manages: unassign
      * (soft delete) dealers no longer selected, assign newly selected
-     * ones that aren't already actively managed by someone else.
+     * ones. The form gates already-assigned dealers behind an explicit
+     * confirmation popup, so a dealer id reaching here is understood to be
+     * an intentional reassignment — release it from its current owner and
+     * hand it to this marketing user.
      */
     private function syncMarketingDealers(User $marketingUser, array $dealerIds): void
     {
@@ -238,9 +269,7 @@ class UserController extends Controller
         $alreadyManaged = $marketingUser->dealerAssignments()->pluck('dealer_id')->all();
 
         foreach (array_diff($dealerIds, $alreadyManaged) as $dealerId) {
-            if (DealerAssignment::where('dealer_id', $dealerId)->exists()) {
-                continue;
-            }
+            DealerAssignment::where('dealer_id', $dealerId)->get()->each->delete();
 
             DealerAssignment::create([
                 'dealer_id' => $dealerId,

@@ -16,6 +16,15 @@ class Booking extends Model
 
     public const APPROVAL_STATUSES = ['draft', 'pending', 'verified', 'approved', 'rejected', 'hold'];
 
+    /**
+     * 'spot' = created inline from the Dispatch Plan form's "Create booking"
+     * modal — the plant leaves the same day the plan is built, so there's
+     * no time for the normal multi-day approval chain; BookingController::
+     * store() fast-tracks these straight to 'approved'. 'regular' is every
+     * booking made through the normal Bookings module.
+     */
+    public const SALE_TYPES = ['regular', 'spot'];
+
     public const DISPATCH_STATUSES = ['pending', 'partial', 'completed'];
 
     public const INVOICE_STATUSES = ['pending', 'generated', 'completed'];
@@ -36,6 +45,7 @@ class Booking extends Model
         'balance_amount',
         'payment_status',
         'approval_status',
+        'sale_type',
         'dispatch_status',
         'invoice_status',
         'remarks',
@@ -111,5 +121,37 @@ class Booking extends Model
     public function reservation()
     {
         return $this->hasOne(StockReservation::class);
+    }
+
+    /**
+     * A booking's active Dispatch Planning assignment, if any — at most one
+     * non-cancelled row ever exists per booking (enforced at the query/
+     * service layer, not a DB constraint; see DispatchPlanningService).
+     */
+    public function planItem()
+    {
+        return $this->hasOne(DispatchPlanItem::class);
+    }
+
+    /**
+     * Every real shipment line ever cut against this booking, across every
+     * Dispatch — a booking is repeatable across more than one Dispatch (full
+     * or partial), so "how much has actually gone out" is always a live sum
+     * rather than a stored column (same convention as
+     * DispatchPlanItem::getDispatchedQtyAttribute()).
+     */
+    public function dispatchLines()
+    {
+        return $this->hasMany(DispatchLine::class);
+    }
+
+    public function getDispatchedQtyAttribute(): int
+    {
+        return (int) $this->dispatchLines->sum('dispatch_qty');
+    }
+
+    public function getBalanceQtyAttribute(): int
+    {
+        return max(0, (int) $this->plant_qty - $this->dispatched_qty);
     }
 }

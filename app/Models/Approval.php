@@ -22,6 +22,7 @@ class Approval extends Model
         'approval_level',
         'status',
         'remarks',
+        'signature',
         'approved_by',
         'approved_at',
         'rejected_by',

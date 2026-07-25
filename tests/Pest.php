@@ -44,7 +44,25 @@ expect()->extend('toBeOne', function () {
 |
 */
 
-function something()
+/**
+ * Fakes a completed OTP verification for the given mobile+purpose, the same
+ * way OtpService::verify() would leave things: a session proof flag plus a
+ * "verified" MobileVerification row — so tests can exercise OTP-gated
+ * registration flows (Dealer/Farmer/Marketing user creation) without going
+ * through the actual send/verify HTTP round trip.
+ */
+function verifyMobileOtp(string $mobile, string $purpose = 'registration'): void
 {
-    // ..
+    $mobile = preg_replace('/\D/', '', $mobile);
+
+    session(["otp_verified.{$purpose}.{$mobile}" => now()->timestamp]);
+
+    \App\Models\MobileVerification::create([
+        'mobile' => $mobile,
+        'otp' => bcrypt('123456'),
+        'purpose' => $purpose,
+        'status' => 'verified',
+        'verified_at' => now(),
+        'expires_at' => now()->addMinutes(10),
+    ]);
 }

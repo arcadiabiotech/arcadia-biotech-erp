@@ -2,11 +2,14 @@
 
 namespace App\Http\Requests;
 
+use App\Http\Requests\Concerns\CapitalizesNames;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
 class DealerStoreRequest extends FormRequest
 {
+    use CapitalizesNames;
+
     /**
      * Authorization is enforced by DealerPolicy via authorizeResource() in
      * the controller, which runs as route middleware before this request is
@@ -16,6 +19,11 @@ class DealerStoreRequest extends FormRequest
     public function authorize(): bool
     {
         return true;
+    }
+
+    protected function prepareForValidation(): void
+    {
+        $this->capitalizeFields(['firm_name', 'dealer_name']);
     }
 
     public function rules(): array

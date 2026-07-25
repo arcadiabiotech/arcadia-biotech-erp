@@ -57,13 +57,16 @@ test('dealer role user only sees their own farmers', function () {
     $this->actingAs($dealerUser)->get(route('farmers.show', $otherFarmer))->assertForbidden();
 });
 
-test('accounts can view and edit any farmer but cannot delete', function () {
+test('accounts cannot view, edit or delete farmers', function () {
+    // Role-based access refactor: Farmers is not in Accounts' current menu,
+    // and the seeder no longer grants Accounts the farmers.view permission
+    // (see FarmerPolicy::viewAny/view and PermissionSeeder's role matrix).
     $accounts = farmerRoleUser('accounts');
     $farmer = Farmer::factory()->create();
 
-    $this->actingAs($accounts)->get(route('farmers.index'))->assertOk();
-    $this->actingAs($accounts)->get(route('farmers.show', $farmer))->assertOk();
-    $this->actingAs($accounts)->get(route('farmers.edit', $farmer))->assertOk();
+    $this->actingAs($accounts)->get(route('farmers.index'))->assertForbidden();
+    $this->actingAs($accounts)->get(route('farmers.show', $farmer))->assertForbidden();
+    $this->actingAs($accounts)->get(route('farmers.edit', $farmer))->assertForbidden();
     $this->actingAs($accounts)->delete(route('farmers.destroy', $farmer))->assertForbidden();
 });
 
@@ -72,6 +75,8 @@ test('admin has full crud access to farmers', function () {
     $dealer = Dealer::factory()->create();
     $taluka = \App\Models\Taluka::factory()->create();
     $village = \App\Models\Village::factory()->create(['taluka_id' => $taluka->id]);
+
+    verifyMobileOtp('9123456780');
 
     $store = $this->actingAs($admin)->post(route('farmers.store'), [
         'farmer_name' => 'Test Farmer',
@@ -157,5 +162,49 @@ test('marketing cannot attribute a farmer to a dealer they are not assigned to',
         'status' => 1,
     ]);
 
-    $response->assertForbidden();
+    // Marketing is now allowed to create farmers in general (under their
+    // own assigned dealers) — this dealer just isn't one of them, so it's
+    // a validation error on dealer_id, not a blanket 403.
+    $response->assertSessionHasErrors('dealer_id');
+    expect(Farmer::where('mobile', '9988887744')->exists())->toBeFalse();
+});
+
+test('marketing can register a farmer under one of their assigned dealers', function () {
+    $marketing = farmerRoleUser('marketing');
+    $assignedDealer = Dealer::factory()->create();
+    $village = \App\Models\Village::factory()->create();
+    $village->load('taluka.district.state');
+
+    DealerAssignment::create([
+        'dealer_id' => $assignedDealer->id,
+        'marketing_user_id' => $marketing->id,
+        'assigned_date' => now(),
+        'status' => true,
+    ]);
+
+    session(["otp_verified.registration.9988887733" => now()->timestamp]);
+    \App\Models\MobileVerification::create([
+        'mobile' => '9988887733',
+        'otp' => bcrypt('123456'),
+        'purpose' => 'registration',
+        'status' => 'verified',
+        'verified_at' => now(),
+        'expires_at' => now()->addMinutes(10),
+    ]);
+
+    $response = $this->actingAs($marketing)->post(route('farmers.store'), [
+        'farmer_name' => 'Assigned Dealer Farmer',
+        'dealer_id' => $assignedDealer->id,
+        'mobile' => '9988887733',
+        'state_id' => $village->taluka->district->state->id,
+        'district_id' => $village->taluka->district->id,
+        'taluka_id' => $village->taluka->id,
+        'village_id' => $village->id,
+        'status' => 1,
+    ]);
+
+    $response->assertSessionHasNoErrors();
+    $farmer = Farmer::where('mobile', '9988887733')->first();
+    expect($farmer)->not->toBeNull();
+    expect($farmer->dealer_id)->toBe($assignedDealer->id);
 });

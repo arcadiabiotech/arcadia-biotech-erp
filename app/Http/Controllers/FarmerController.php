@@ -2,22 +2,26 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\HasLocationOptions;
 use App\Http\Requests\FarmerStoreRequest;
 use App\Http\Requests\FarmerUpdateRequest;
 use App\Models\ActivityLog;
 use App\Models\Dealer;
-use App\Models\District;
 use App\Models\Farmer;
+use App\Models\RatingHistory;
 use App\Models\State;
-use App\Models\Taluka;
-use App\Models\Village;
+use App\Services\OtpService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 class FarmerController extends Controller
 {
-    public function __construct()
-    {
+    use HasLocationOptions;
+
+    public function __construct(
+        private readonly OtpService $otp,
+    ) {
         $this->authorizeResource(Farmer::class, 'farmer');
     }
 
@@ -74,12 +78,35 @@ class FarmerController extends Controller
     public function store(FarmerStoreRequest $request)
     {
         $data = $this->prepared($request);
+
+        // Registration rule: a Farmer cannot be created until its mobile
+        // number has been OTP-verified. Authoritative, server-side gate —
+        // the OTP UI on the form is a courtesy only.
+        if (! $this->otp->isVerified($data['mobile'], 'registration')) {
+            throw ValidationException::withMessages([
+                'mobile' => 'Please verify this mobile number via OTP before registering the farmer.',
+            ]);
+        }
+
         $data['farmer_code'] = $this->nextFarmerCode();
         $data['created_by'] = $request->user()->id;
 
         $farmer = Farmer::create($data);
 
+        $this->otp->consume($data['mobile'], 'registration');
+
         ActivityLog::record('farmers', $farmer->id, 'create', [], $farmer->toArray());
+
+        // Dispatch plan's inline "register new farmer" modal posts here via
+        // fetch() with Accept: application/json instead of a normal browser
+        // form submit — give it back the fields it needs to select the new
+        // farmer without a page reload, rather than the usual redirect.
+        if ($request->wantsJson()) {
+            return response()->json([
+                'ok' => true,
+                'farmer' => $farmer->only(['id', 'farmer_name', 'dealer_id', 'farmer_code']),
+            ]);
+        }
 
         return redirect()->route('farmers.index')->with('success', 'Farmer registered successfully.');
     }
@@ -90,11 +117,12 @@ class FarmerController extends Controller
      */
     public function show(Farmer $farmer)
     {
-        $farmer->load(['dealer.assignment.marketingUser', 'state', 'district', 'taluka', 'village', 'createdBy', 'updatedBy']);
+        $farmer->load(['dealer.assignment.marketingUser', 'state', 'district', 'taluka', 'village', 'createdBy', 'updatedBy', 'ratingRecord']);
 
         $activity = ActivityLog::where('module', 'farmers')->where('record_id', $farmer->id)->latest()->limit(30)->get();
+        $ratingHistory = RatingHistory::where('module', 'farmer')->where('rateable_id', $farmer->id)->latest('created_at')->get();
 
-        return view('farmers.show', compact('farmer', 'activity'));
+        return view('farmers.show', compact('farmer', 'activity', 'ratingHistory'));
     }
 
     public function edit(Farmer $farmer, Request $request)
@@ -184,18 +212,6 @@ class FarmerController extends Controller
             ->value('max_number');
 
         return 'FAR'.str_pad(((int) $maxNumber) + 1, 6, '0', STR_PAD_LEFT);
-    }
-
-    private function locationOptions(): array
-    {
-        return [
-            'states' => State::where('status', true)->orderBy('name')->get(['id', 'name']),
-            'districts' => District::where('status', true)->orderBy('name')->get(['id', 'name', 'state_id']),
-            'talukas' => Taluka::where('status', true)->orderBy('name')->get(['id', 'name', 'district_id']),
-            'villages' => Village::where('status', true)->orderBy('name')->get(['id', 'name', 'taluka_id']),
-            'soilTypes' => Farmer::SOIL_TYPES,
-            'irrigationTypes' => Farmer::IRRIGATION_TYPES,
-        ];
     }
 
     private function visibleDealers($user)

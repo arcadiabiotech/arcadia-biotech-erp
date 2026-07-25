@@ -16,6 +16,9 @@ class RoleSeeder extends Seeder
             'dealer' => 'Dealer',
             'accounts' => 'Accounts',
             'dispatch' => 'Dispatch',
+            'dispatch-planner' => 'Dispatch Planner',
+            'supervisor' => 'Supervisor',
+            'lab-technician' => 'Lab Technician',
             'staff' => 'Staff',
         ] as $name => $displayName) {
             Role::updateOrCreate(['name' => $name], ['display_name' => $displayName, 'status' => true]);

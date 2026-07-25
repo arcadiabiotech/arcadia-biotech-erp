@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\HasLocationOptions;
 use App\Http\Requests\BookingStoreRequest;
 use App\Http\Requests\BookingUpdateRequest;
 use App\Models\ActivityLog;
@@ -19,6 +20,8 @@ use Illuminate\Support\Facades\DB;
 
 class BookingController extends Controller
 {
+    use HasLocationOptions;
+
     public function __construct(
         private readonly BookingService $bookings,
         private readonly StockReservationService $reservations,
@@ -56,9 +59,22 @@ class BookingController extends Controller
 
     public function store(BookingStoreRequest $request)
     {
+        // Dispatch Plan's inline "Create Booking" modal posts here via
+        // fetch() with Accept: application/json instead of a normal browser
+        // form submit — that's also exactly the "spot selling" case: a
+        // farmer booked and dispatched the same day, straight out of
+        // Dispatch Planning, with no time for the normal multi-day
+        // Accounts-verify -> Admin-approve chain. Tag it 'spot' and
+        // fast-track it through that chain automatically below instead of
+        // leaving it stuck on Draft.
+        $isSpotSale = $request->wantsJson();
+
         $data = $request->validated();
+        $data['discount'] = $data['discount'] ?? 0;
+        $data['advance_amount'] = $data['advance_amount'] ?? 0;
         $data['booking_no'] = $this->bookings->nextBookingNo();
         $data['approval_status'] = 'draft';
+        $data['sale_type'] = $isSpotSale ? 'spot' : 'regular';
         $data['created_by'] = $request->user()->id;
         $data['marketing_user_id'] = Dealer::find($data['dealer_id'])?->assignment?->marketing_user_id;
 
@@ -68,14 +84,45 @@ class BookingController extends Controller
 
         // Wrapped so an insufficient-stock rejection from reserve() rolls
         // back the booking itself — never leave a booking with no reservation.
-        $booking = DB::transaction(function () use ($data) {
+        $booking = DB::transaction(function () use ($data, $request, $isSpotSale) {
             $booking = Booking::create($data);
             $this->reservations->reserve($booking);
+
+            if ($isSpotSale) {
+                $actor = $request->user();
+                $remarks = 'Spot sale — auto-submitted and approved from Dispatch Planning.';
+
+                $this->bookings->submit($booking);
+                $this->bookings->verify($booking, $actor, $remarks);
+                $this->approvals->record('bookings', $booking->id, Approval::LEVEL_VERIFICATION, 'verified', $actor, $remarks, $booking->booking_no);
+                $this->bookings->approve($booking, $actor, $remarks);
+                $this->approvals->record('bookings', $booking->id, Approval::LEVEL_APPROVAL, 'approved', $actor, $remarks, $booking->booking_no);
+            }
 
             return $booking;
         });
 
         ActivityLog::record('bookings', $booking->id, 'create', [], $booking->toArray());
+
+        if ($isSpotSale) {
+            $booking->load('farmer:id,farmer_name');
+
+            return response()->json([
+                'ok' => true,
+                'booking' => [
+                    'id' => $booking->id,
+                    'booking_no' => $booking->booking_no,
+                    'dealer_id' => $booking->dealer_id,
+                    'farmer_id' => $booking->farmer_id,
+                    'farmer_name' => $booking->farmer?->farmer_name,
+                    'variety' => $booking->variety,
+                    'sale_type' => $booking->sale_type,
+                    'booked_qty' => $booking->plant_qty,
+                    'dispatched_qty' => 0,
+                    'balance_qty' => $booking->plant_qty,
+                ],
+            ]);
+        }
 
         return redirect()->route('bookings.show', $booking)->with('success', 'Booking created successfully.');
     }
@@ -113,6 +160,8 @@ class BookingController extends Controller
         $original = $booking->toArray();
 
         $data = $request->validated();
+        $data['discount'] = $data['discount'] ?? 0;
+        $data['advance_amount'] = $data['advance_amount'] ?? 0;
         $data['updated_by'] = $request->user()->id;
 
         DB::transaction(function () use ($booking, $data) {
@@ -254,7 +303,7 @@ class BookingController extends Controller
         $this->authorize('updateDispatchStatus', $booking);
 
         DB::transaction(function () use ($request, $booking) {
-            $this->reservations->convert($booking, $request->user()->id);
+            $this->reservations->convert($booking, actorId: $request->user()->id);
             $booking->update(['dispatch_status' => 'completed', 'updated_by' => $request->user()->id]);
             $this->approvals->record('bookings', $booking->id, Approval::LEVEL_APPROVAL, 'completed', $request->user(), null, $booking->booking_no, $this->notifyRecipients($booking));
         });
@@ -366,7 +415,12 @@ class BookingController extends Controller
             ->when($request->filled('date_from'), fn ($q) => $q->whereDate('booking_date', '>=', $request->input('date_from')))
             ->when($request->filled('date_to'), fn ($q) => $q->whereDate('booking_date', '<=', $request->input('date_to')))
             ->when($user->hasRole('marketing'), fn ($q) => $q->whereHas('dealer.assignment', fn ($qq) => $qq->where('marketing_user_id', $user->id)))
-            ->when($user->hasRole('dealer'), fn ($q) => $q->where('dealer_id', $user->dealer_id));
+            ->when($user->hasRole('dealer'), fn ($q) => $q->where('dealer_id', $user->dealer_id))
+            // Role-based access refactor: Dispatch's menu item is "Approved
+            // Bookings" specifically — they only ever need bookings that
+            // are actually eligible to dispatch, not the full pipeline
+            // (draft/pending/verified/rejected/hold).
+            ->when($user->hasRole('dispatch'), fn ($q) => $q->where('approval_status', 'approved'));
     }
 
     private function filterOptions($user): array
@@ -391,12 +445,16 @@ class BookingController extends Controller
 
         $farmers = Farmer::whereIn('dealer_id', $dealers->pluck('id'))->orderBy('farmer_name')->get(['id', 'farmer_name', 'dealer_id']);
 
-        return [
-            'dealers' => $dealers,
-            'farmers' => $farmers,
-            'varieties' => Booking::VARIETIES,
-            'canChangePricing' => $user->hasRole(['super-admin', 'admin']),
-        ];
+        return array_merge(
+            [
+                'dealers' => $dealers,
+                'farmers' => $farmers,
+                'varieties' => Booking::VARIETIES,
+                'canChangePricing' => $user->hasRole(['super-admin', 'admin']),
+            ],
+            // Feeds the "register new dealer/farmer" quick-add modals' location cascade.
+            $this->locationOptions()
+        );
     }
 
     private function visibleDealers($user)

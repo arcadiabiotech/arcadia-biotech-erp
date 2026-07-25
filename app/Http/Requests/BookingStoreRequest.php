@@ -60,16 +60,18 @@ class BookingStoreRequest extends FormRequest
     }
 
     /**
-     * Which dealers this user may book for: Admins/Accounts see every
-     * dealer, Marketing only their assigned dealers. Dealer-role users
-     * never create bookings at all (empty set — the Policy already blocks
-     * them, this is the belt to that braces).
+     * Which dealers this user may book for: Admins/Accounts/dispatch-planner
+     * see every dealer (dispatch-planner needs this for the Dispatch Plan
+     * form's inline "Create Booking" modal, which can plan for any dealer),
+     * Marketing only their assigned dealers. Dealer-role users never create
+     * bookings at all (empty set — the Policy already blocks them, this is
+     * the belt to that braces).
      */
     public function allowedDealerIds(): array
     {
         $user = $this->user();
 
-        if ($user->hasRole(['super-admin', 'admin', 'accounts'])) {
+        if ($user->hasRole(['super-admin', 'admin', 'accounts', 'dispatch-planner'])) {
             return Dealer::pluck('id')->all();
         }
 

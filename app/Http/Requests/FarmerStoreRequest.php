@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Http\Requests\Concerns\CapitalizesNames;
 use App\Models\Dealer;
 use App\Models\Farmer;
 use Illuminate\Foundation\Http\FormRequest;
@@ -9,6 +10,8 @@ use Illuminate\Validation\Rule;
 
 class FarmerStoreRequest extends FormRequest
 {
+    use CapitalizesNames;
+
     /**
      * Authorization is enforced by FarmerPolicy via authorizeResource() in
      * the controller, which runs as route middleware before this request is
@@ -18,6 +21,11 @@ class FarmerStoreRequest extends FormRequest
     public function authorize(): bool
     {
         return true;
+    }
+
+    protected function prepareForValidation(): void
+    {
+        $this->capitalizeFields(['farmer_name', 'father_name']);
     }
 
     public function rules(): array
@@ -68,7 +76,7 @@ class FarmerStoreRequest extends FormRequest
     {
         $user = $this->user();
 
-        if ($user->hasRole(['super-admin', 'admin', 'accounts'])) {
+        if ($user->hasRole(['super-admin', 'admin', 'accounts', 'dispatch-planner'])) {
             return Dealer::pluck('id')->all();
         }
 

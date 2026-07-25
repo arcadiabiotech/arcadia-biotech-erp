@@ -66,6 +66,48 @@ test('booking numbers follow the BK-YYYY-000001 format and increment sequentiall
     expect((int) substr($numbers[1], -6))->toBe((int) substr($numbers[0], -6) + 1);
 });
 
+test('a booking created via the Dispatch Plan quick-add modal is tagged spot and auto-approved', function () {
+    $planner = bookingRoleUser('dispatch-planner');
+    $dealer = Dealer::factory()->create();
+    $farmer = Farmer::factory()->create(['dealer_id' => $dealer->id]);
+
+    $response = $this->actingAs($planner)->postJson(route('bookings.store'), [
+        'dealer_id' => $dealer->id,
+        'farmer_id' => $farmer->id,
+        'variety' => 'G9',
+        'booking_date' => now()->toDateString(),
+        'plant_qty' => 100,
+        'plant_rate' => 12,
+    ]);
+
+    $response->assertOk();
+    $response->assertJsonPath('booking.sale_type', 'spot');
+
+    $booking = Booking::where('dealer_id', $dealer->id)->first();
+    expect($booking->sale_type)->toBe('spot');
+    expect($booking->approval_status)->toBe('approved');
+    expect($booking->approved_by)->toBe($planner->id);
+});
+
+test('a booking created through the normal Bookings form is regular and stays in draft', function () {
+    $admin = bookingRoleUser('admin');
+    $dealer = Dealer::factory()->create();
+    $farmer = Farmer::factory()->create(['dealer_id' => $dealer->id]);
+
+    $this->actingAs($admin)->post(route('bookings.store'), [
+        'dealer_id' => $dealer->id,
+        'farmer_id' => $farmer->id,
+        'variety' => 'G9',
+        'booking_date' => now()->toDateString(),
+        'plant_qty' => 100,
+        'plant_rate' => 12,
+    ])->assertSessionHasNoErrors();
+
+    $booking = Booking::where('dealer_id', $dealer->id)->first();
+    expect($booking->sale_type)->toBe('regular');
+    expect($booking->approval_status)->toBe('draft');
+});
+
 test('marketing can create a booking for an assigned dealer but not for others', function () {
     $marketing = bookingRoleUser('marketing');
     $assignedDealer = Dealer::factory()->create();

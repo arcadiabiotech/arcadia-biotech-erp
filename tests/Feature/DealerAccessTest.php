@@ -59,12 +59,18 @@ test('dealer role user only sees their own dealer record', function () {
     $this->actingAs($dealerUser)->get(route('dealers.edit', $otherDealer))->assertForbidden();
 });
 
-test('marketing and dealer roles cannot create or delete dealers', function () {
+test('marketing can create dealers but not delete them; dealer role can do neither', function () {
     $marketing = makeRoleUser('marketing');
+    $dealerRoleUser = makeRoleUser('dealer');
     $dealer = Dealer::factory()->create();
 
-    $this->actingAs($marketing)->get(route('dealers.create'))->assertForbidden();
+    // User hierarchy refactor: Marketing may now create Dealers directly
+    // (see DealerPolicy::create), but deletion stays Admin/Super Admin only.
+    $this->actingAs($marketing)->get(route('dealers.create'))->assertOk();
     $this->actingAs($marketing)->delete(route('dealers.destroy', $dealer))->assertForbidden();
+
+    $this->actingAs($dealerRoleUser)->get(route('dealers.create'))->assertForbidden();
+    $this->actingAs($dealerRoleUser)->delete(route('dealers.destroy', $dealer))->assertForbidden();
 });
 
 test('admin can view, edit and delete any dealer', function () {
@@ -84,12 +90,15 @@ test('non-admin roles are forbidden from managing dealer assignments', function 
     $this->actingAs($marketing)->get(route('dealer-assignments.create'))->assertForbidden();
 });
 
-test('accounts can view any dealer but cannot edit or delete', function () {
+test('accounts cannot view, edit or delete dealers', function () {
+    // Role-based access refactor: Dealers is not in Accounts' current menu,
+    // and the seeder no longer grants Accounts the dealers.view permission
+    // (see DealerPolicy::viewAny/view and PermissionSeeder's role matrix).
     $accounts = makeRoleUser('accounts');
     $dealer = Dealer::factory()->create();
 
-    $this->actingAs($accounts)->get(route('dealers.index'))->assertOk();
-    $this->actingAs($accounts)->get(route('dealers.show', $dealer))->assertOk();
+    $this->actingAs($accounts)->get(route('dealers.index'))->assertForbidden();
+    $this->actingAs($accounts)->get(route('dealers.show', $dealer))->assertForbidden();
     $this->actingAs($accounts)->get(route('dealers.edit', $dealer))->assertForbidden();
     $this->actingAs($accounts)->delete(route('dealers.destroy', $dealer))->assertForbidden();
 });
@@ -166,6 +175,8 @@ test('creating a dealer auto-generates a DLR-prefixed code and records who creat
     $state = \App\Models\State::factory()->create();
     $district = \App\Models\District::factory()->create(['state_id' => $state->id]);
 
+    verifyMobileOtp('9988776655');
+
     $response = $this->actingAs($admin)->post(route('dealers.store'), [
         'firm_name' => 'Test Farms',
         'dealer_name' => 'Test Dealer',
@@ -182,4 +193,25 @@ test('creating a dealer auto-generates a DLR-prefixed code and records who creat
     expect($dealer->dealer_code)->toStartWith('DLR');
     expect($dealer->created_by)->toBe($admin->id);
     expect($dealer->district_id)->toBe($district->id);
+});
+
+test('dealer and firm names are title-cased on create, every word capitalized', function () {
+    $admin = makeRoleUser('admin');
+    $state = \App\Models\State::factory()->create();
+    $district = \App\Models\District::factory()->create(['state_id' => $state->id]);
+
+    verifyMobileOtp('9988776644');
+
+    $this->actingAs($admin)->post(route('dealers.store'), [
+        'firm_name' => 'green valley farms',
+        'dealer_name' => 'ramesh kumar patel',
+        'mobile' => '9988776644',
+        'state_id' => $state->id,
+        'district_id' => $district->id,
+        'status' => 1,
+    ])->assertSessionHasNoErrors();
+
+    $dealer = Dealer::where('mobile', '9988776644')->first();
+    expect($dealer->firm_name)->toBe('Green Valley Farms');
+    expect($dealer->dealer_name)->toBe('Ramesh Kumar Patel');
 });

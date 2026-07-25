@@ -8,9 +8,18 @@ class NotificationController extends Controller
 {
     /**
      * Marks a notification read and sends the user to the record it's
-     * about. Only bookings exist today, but module_name is stored on every
-     * notification so this stays correct as more modules adopt the engine.
+     * about. module_name is stored on every notification, so growing this
+     * map is all that's needed as more modules adopt the engine.
      */
+    private const ROUTE_BY_MODULE = [
+        'bookings' => 'bookings.show',
+        'lab-checklists' => 'lab-checklists.show',
+        'lab-maintenance' => 'lab-maintenance.show',
+        'lab-media' => 'lab-media.show',
+        'lab-chemicals' => 'lab-chemicals.show',
+        'lab-contamination' => 'lab-contamination.show',
+    ];
+
     public function read(Request $request, string $notification)
     {
         $record = $request->user()->notifications()->findOrFail($notification);
@@ -19,8 +28,8 @@ class NotificationController extends Controller
         $moduleName = $record->data['module_name'] ?? null;
         $recordId = $record->data['record_id'] ?? null;
 
-        if ($moduleName === 'bookings' && $recordId) {
-            return redirect()->route('bookings.show', $recordId);
+        if ($recordId && isset(self::ROUTE_BY_MODULE[$moduleName])) {
+            return redirect()->route(self::ROUTE_BY_MODULE[$moduleName], $recordId);
         }
 
         return back();
